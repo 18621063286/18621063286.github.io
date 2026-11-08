@@ -42,7 +42,8 @@ Transformer 每一层都往一个共享的 1,024 维向量（残差流）里**�
 
 > 问题：这个 prompt 有没有告诉 Astra 该往哪个方向找？如果有，这对"Astra 自己诊断出死循环"这个说法意味着什么？
 
-<details markdown="1"><summary>讨论</summary>
+<details markdown="1">
+<summary markdown="span">讨论</summary>
 
 
 原文写着："for example, if the model often fails because it repeats itself and never finishes, finding and fixing what drives that repetition counts"，
@@ -66,7 +67,8 @@ wsp_repro/.venv/bin/python -I tutorial/tools/e8_trajectory.py
 
 > 问题：p50c 在**第 10 次前向**时的提升是多少？p10c 和 p25c 最终的提升是多少？这说明了什么？
 
-<details markdown="1"><summary>讨论</summary>
+<details markdown="1">
+<summary markdown="span">讨论</summary>
 
 
 p50c 在第 10 次前向时已经是 **+24 个点**，第 20 次时 +40。而 p10c 的各次测量在 −2 到 +9 之间（最后一次只有 +0.4），
@@ -87,7 +89,8 @@ wsp_repro/.venv/bin/python -I tutorial/tools/e8_edit_anatomy.py p50c
 
 > 问题：ΔW 的秩是多少？分量从多少变成了多少？比值是多少？这和"subtracted that direction"（减掉了这个方向）一致吗？
 
-<details markdown="1"><summary>讨论</summary>
+<details markdown="1">
+<summary markdown="span">讨论</summary>
 
 
 - 两个矩阵的 ΔW 都是**秩 1**（第一个奇异值约为 1.7，其余约为 0.001，是 bf16 舍入的噪声）：确实是沿着一个方向 u 改的。
@@ -109,7 +112,8 @@ python3 -c "import json;print(json.load(open('upstream/exp8_math/runs/p50c/state
 
 看 `RESCUE STRATA` 这一段：练习题被分成"原模型本来就写完了"和"原模型被截断"两组。
 
-<details markdown="1"><summary>讨论</summary>
+<details markdown="1">
+<summary markdown="span">讨论</summary>
 
 
 - 原模型**本来就写完了**的 114 题：修改前 93.9%，修改后 93.9%，**提升为 0**。
