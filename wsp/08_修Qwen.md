@@ -145,19 +145,57 @@ cd /home/ken/下载/mit/wsp_repro
 
 ### 8.7 用原协议测 MATH-500
 
-> 🚧 **正在搭建**：vLLM 在 GB10 上第一次运行时，Triton 需要编译一个 C 模块，必须先安装 `python3.12-dev`。装好之后这里会给出验证过的命令和参考结果。
-
-计划中的命令（MATH-500 抽 100 题，每题 1 个样本，原协议）：
+先准备 vLLM 的运行环境（FlashInfer 第一次运行时要用 nvcc 和 ninja 即时编译内核）：
 
 ```bash
-.venv/bin/python -I exp8/quick_eval.py models/qwen_text_base math500 100 1 exp8/quick/base.json
-.venv/bin/python -I exp8/quick_eval.py models/qwen_text_p50c math500 100 1 exp8/quick/p50c.json
+cd /home/ken/下载/mit/wsp_repro
+. harness/vllm_env.sh
 ```
+
+MATH-500 抽 100 题（固定的随机顺序，所以每个模型做的是同一批题），每题 1 个样本，用原协议：
+
+```bash
+# 参数：模型目录  基准  题数  每题样本数  输出文件  [种子]  [最大 token]  [thinking 1/0]
+.venv/bin/python -I exp8/quick_eval.py models/qwen_text_base math500 100 1 exp8/quick/my_base.json
+.venv/bin/python -I exp8/quick_eval.py models/qwen_text_p50c math500 100 1 exp8/quick/my_p50c.json
+.venv/bin/python -I exp8/quick_eval.py models/qwen_text_base math500 100 1 exp8/quick/my_nothink.json 0 32768 0
+```
+
+在 GB10 上，原版那一组大约要 1 小时：93% 的回答会写满 32,768 token，这一组一共要生成大约 310 万个 token。
+
+<details markdown="1">
+<summary markdown="span">参考结果（我们实测）</summary>
+
+
+| 模型 | 准确率 | 截断比例 | 平均 token | 原作者结果 |
+|---|---|---|---|---|
+| 原版，开 thinking | 8% | 93% | 31,091 | 7.9%（截断 93.0%） |
+| p50c 修改版，开 thinking | 49% | 31% | 21,451 | 48.1%（截断 33.1%） |
+| **原版，关 thinking** | **44%** | 14% | 9,348 | 博客没有报告 |
+
+1. 本地评测和原作者对得上（8 对 7.9，49 对 48.1），说明还原的模型和评测协议都是对的。
+2. **原版只要关掉 thinking，就能拿到 44%**，和修改版的 49% 只差 5 个点。100 题时标准误大约是 ±5 个点，这个差距并不显著。
+3. 所以博客里"7.9 → 48.1"的大部分提升，靠"不让模型进入那个会死循环的 thinking 模式"也能拿到。
+   修改版的价值在于：它**保留了 thinking**，同时去掉了死循环。至于这样做比直接关掉 thinking 多出多少，需要更大的样本才能确定。
+
+
+</details>
+
 
 ## 8.5 让 Claude 做
 
-> 🚧 **正在搭建**：需要一个 forward-pass 服务（vLLM 配对生成、teacher-forced 读取 logprobs、隐状态和激活）和一个持久的 Python kernel，原作者没有公开这部分代码。
-> 搭好之后，计划先用 v3 prompt（带提示）跑 25 次前向，再用去掉提示的版本跑，每种 3 次。
+原作者没有公开这部分 harness，我们按原 prompt 和日志里的消息格式重写了一套：
+
+| 组件 | 作用 |
+|---|---|
+| `wsp_repro/harness/kernel_server.py` + `exp8/prelude.py` | 持久的 Python kernel，跑在 bwrap 沙箱里（没有 GPU、没有网络）；提供 `load`、`save_edit`、`tok` 等函数；`save_edit` 会拒绝修改最终 norm、嵌入层，以及"整体乘一个常数"的修改 |
+| `wsp_repro/harness/forward_server.py` | forward 工具：vLLM 配对生成（每道题的种子固定，两个模型共享），transformers 读 logprobs、隐状态、MLP 激活和注意力；非法请求不扣预算 |
+| `wsp_repro/harness/driver8.py` | 整个循环：每步必须先解释、预算计数、每 40 轮一次 handoff、最后提交 |
+
+和原实验不一致的地方见 `wsp_repro/DEVIATIONS.md`。最主要的一处：GB10 的 CPU 和 GPU 共用内存，所以 kernel 只能给 40 GB，原 prompt 写的是 96 GB。
+
+> 🟡 **正在运行**：25 次前向的试点（v3 prompt，推理强度 max），目录 `wsp_repro/exp8/runs/v3_b25_r0/`。在 GB10 上，一次满额生成可能要 2 到 3 小时，整个试点预计要一到两天。
+> 跑完后这里会给出结果，再决定要不要跑完整的 3 × 3 次。
 
 ## 8.6 本章小结
 
@@ -167,4 +205,5 @@ cd /home/ken/下载/mit/wsp_repro
 | 预算越多效果越好（10/25/50） | 每档只跑了 1 次；p50c 在第 10 次前向时就已经超过另外两次的最终水平 |
 | 减掉了一个方向 | 秩 1 的修改，但 α = 6：方向被反过来并放大了 5 倍 |
 | MATH-500 7.9 → 48.1 | 提升全部来自原本被截断的题；本来就做完的题提升为 0 |
+| （没有提到） | 原版只要关掉 thinking 就有 44%（我们实测，100 题），和修改版的 49% 相差不显著 |
 | 改动 0.016% 的权重 | ✅ 属实（131,072 个位置，bf16 舍入后有 130,188 个真的变了） |
