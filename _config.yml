@@ -1,0 +1,12 @@
+title: 18621063286 的学习笔记
+description: 动手学 Weight-Space Programming
+theme: jekyll-theme-cayman
+markdown: kramdown
+kramdown:
+  input: GFM
+  parse_block_html: true
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
